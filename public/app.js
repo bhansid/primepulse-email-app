@@ -8,21 +8,43 @@
 
   const show = (id, on = true) => { $(id).hidden = !on; };
   const msg = (text, ok) => { const m = $('msg'); m.textContent = text; m.className = 'msg ' + (ok ? 'ok' : 'err'); m.hidden = false; };
+  // Session token: kept in memory and in this tab's sessionStorage (cleared when the tab closes).
+  let token = '';
+  try { token = sessionStorage.getItem('pp_session') || ''; } catch { /* storage blocked */ }
+  const setToken = (t) => { token = t || ''; try { t ? sessionStorage.setItem('pp_session', t) : sessionStorage.removeItem('pp_session'); } catch { /* ignore */ } };
+  const authHeaders = () => (token ? { 'x-pp-session': token } : {});
+
   const api = async (path, opts = {}) => {
     const r = await fetch(path, { credentials: 'same-origin', ...opts,
-      headers: { 'content-type': 'application/json', ...(opts.headers || {}) } });
+      headers: { 'content-type': 'application/json', ...authHeaders(), ...(opts.headers || {}) } });
     const data = await r.json().catch(() => ({}));
-    if (r.status === 401 && path !== '/api/login') { boot(); throw new Error('Session expired. Please log in again.'); }
+    if (r.status === 401 && path !== '/api/login') { setToken(''); boot(); throw new Error('Session expired. Please log in again.'); }
     if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
     return data;
   };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const loginError = (text) => { $('login-msg').textContent = text; show('login-msg'); };
 
   /* ---------- boot / auth ---------- */
-  async function boot() {
-    const me = await fetch('/api/me', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => ({}));
+  async function getMe() {
+    const r = await fetch('/api/me', { credentials: 'same-origin', headers: authHeaders() });
+    if (!r.ok) throw new Error(`The server isn't responding correctly (error ${r.status}). Check that the latest deploy finished in Netlify.`);
+    return r.json();
+  }
+
+  async function boot(justLoggedIn = false) {
+    let me;
+    try { me = await getMe(); } catch (err) { me = { authed: false, error: err.message }; }
     show('boot', false);
-    if (!me.authed) { show('panel', false); show('logout', false); show('login'); $('password').focus(); return; }
+    if (!me.authed) {
+      show('panel', false); show('logout', false); show('login');
+      if (me.error) loginError(me.error);
+      else if (me.missingSettings?.length) loginError('Netlify is missing these settings: ' + me.missingSettings.join(', ') + '. Add them, then redeploy.');
+      else if (justLoggedIn) loginError("Password accepted, but the session wasn't kept. Make sure you're on the https:// address, then try again.");
+      $('password').focus();
+      return;
+    }
+    show('login-msg', false);
     show('login', false); show('panel'); show('logout');
     const sel = $('nurse');
     sel.length = 1;
@@ -33,15 +55,20 @@
   $('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     show('login-msg', false);
+    const btn = e.submitter || $('login-form').querySelector('button');
+    btn.disabled = true; btn.textContent = 'Checking…';
     try {
-      await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('password').value }) });
+      const res = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('password').value.trim() }) });
+      setToken(res.token);
       $('password').value = '';
-      boot();
-    } catch (err) { $('login-msg').textContent = err.message; show('login-msg'); }
+      await boot(true);
+    } catch (err) { loginError(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Log in'; }
   });
 
   $('logout').addEventListener('click', async () => {
-    await fetch('/api/login', { method: 'DELETE', credentials: 'same-origin' });
+    await fetch('/api/login', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+    setToken('');
     location.reload();
   });
 

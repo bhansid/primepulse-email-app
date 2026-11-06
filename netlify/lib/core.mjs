@@ -16,25 +16,34 @@ export const json = (data, status = 200, headers = {}) =>
 const SESSION_HOURS = 12;
 const sign = (v) => crypto.createHmac('sha256', env('SESSION_SECRET')).update(v).digest('base64url');
 
-export function sessionCookie() {
+// The session is a signed token. The browser gets it twice: as an HttpOnly
+// cookie AND in the login response (sent back in the X-PP-Session header).
+// Either one is accepted, so login works even if a browser drops the cookie.
+export function makeToken() {
   const payload = Buffer.from(JSON.stringify({ exp: Date.now() + SESSION_HOURS * 3600e3 })).toString('base64url');
-  return `pp_session=${payload}.${sign(payload)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_HOURS * 3600}`;
+  return `${payload}.${sign(payload)}`;
 }
-export const clearCookie = 'pp_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+export const sessionCookie = (token) =>
+  `pp_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_HOURS * 3600}`;
+export const clearCookie = 'pp_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
 
-export function isAuthed(req) {
-  if (!env('SESSION_SECRET')) return false;
-  const m = (req.headers.get('cookie') || '').match(/(?:^|;\s*)pp_session=([^;]+)/);
-  if (!m) return false;
-  const [p, s] = m[1].split('.');
+function tokenValid(token) {
+  const [p, s] = String(token || '').trim().split('.');
   if (!p || !s) return false;
   const expected = sign(p);
   if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return false;
   try { return JSON.parse(Buffer.from(p, 'base64url').toString()).exp > Date.now(); } catch { return false; }
 }
 
+export function isAuthed(req) {
+  if (!env('SESSION_SECRET')) return false;
+  if (tokenValid(req.headers.get('x-pp-session'))) return true;
+  const m = (req.headers.get('cookie') || '').match(/(?:^|;\s*)pp_session=([^;]+)/);
+  return !!m && tokenValid(m[1]);
+}
+
 export function passwordOk(input) {
-  const real = env('PANEL_PASSWORD');
+  const real = env('PANEL_PASSWORD').trim();
   if (!real) return false;
   const a = crypto.createHash('sha256').update(String(input ?? '')).digest();
   const b = crypto.createHash('sha256').update(real).digest();
@@ -104,7 +113,7 @@ export const SEARCH_FILTERS = ['first_name_startswith', 'last_name_startswith'];
 export async function searchPatients(term) {
   const found = new Map();
   for (const f of SEARCH_FILTERS) {
-    const body = await charmGet('patients', { [f]: term, facility_id: 'ALL', per_page: 25 });
+    const body = await charmGet('patients', { [f]: term, facility_id: env('CHARM_FACILITY_ID', 'ALL'), per_page: 25 });
     const list = body.patients ?? body.data?.patients ?? body.data ?? [];
     if (Array.isArray(list)) for (const p of list.map(normPatient)) if (p.id) found.set(p.id, p);
   }
