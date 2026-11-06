@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>PrimePulse Patient Email</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <div class="logo">P</div>
+      <div>
+        <h1>PrimePulse</h1>
+        <p>Patient email panel</p>
+      </div>
+      <button id="logout" class="link" hidden>Log out</button>
+    </header>
+
+    <!-- Login -->
+    <section id="login" class="card" hidden>
+      <h2>Staff login</h2>
+      <form id="login-form">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button class="btn" type="submit">Log in</button>
+        <p id="login-msg" class="msg err" hidden></p>
+      </form>
+    </section>
+
+    <!-- Panel -->
+    <section id="panel" class="card" hidden>
+      <div class="field">
+        <label for="nurse">Nurse</label>
+        <select id="nurse"><option value="">Select nurse</option></select>
+      </div>
+
+      <div class="field">
+        <label for="search">Patients <span class="hint">search by first or last name · select one or more</span></label>
+        <div class="search-wrap">
+          <input id="search" type="search" placeholder="Start typing a patient name…" autocomplete="off">
+          <div id="results" class="results" hidden></div>
+        </div>
+        <div id="chips" class="chips"></div>
+      </div>
+
+      <div class="field">
+        <label for="subject">Subject</label>
+        <input id="subject" type="text" maxlength="200">
+      </div>
+
+      <div class="field">
+        <label for="message">Message <span class="hint">{name} becomes each patient's first name</span></label>
+        <textarea id="message" placeholder="Hi {name},"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Attachments <span class="hint">PDF, images, Word, Excel · 4 MB total</span></label>
+        <div id="drop" class="drop" tabindex="0">Drop files here or click to choose</div>
+        <input id="files" type="file" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.txt">
+        <div id="filelist"></div>
+      </div>
+
+      <button id="send" class="btn" disabled>Send email</button>
+      <div id="progress" class="progress" hidden><div></div></div>
+      <div id="msg" class="msg" hidden></div>
+    </section>
+
+    <p id="boot" class="boot">Loading…</p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

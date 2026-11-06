@@ -1,0 +1,7 @@
+{
+  "name": "primepulse-email-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PrimePulse patient email panel (Netlify). No dependencies.",
+  "engines": { "node": ">=18" }
+}
