@@ -178,7 +178,7 @@
     let i = 0;
     for (const [id, name] of picked) {
       $('send').textContent = `Sending ${++i} of ${n}…`;
-      try { await api('/api/send', { method: 'POST', body: JSON.stringify({ ...base, patientId: id }) }); ok.push(id); }
+      try { await api('/api/send', { method: 'POST', body: JSON.stringify({ ...base, patientId: id, patientName: name }) }); ok.push(id); }
       catch (err) { failed.push(`${name}: ${err.message}`); }
       bar.firstElementChild.style.width = `${(i / n) * 100}%`;
     }

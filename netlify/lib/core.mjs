@@ -98,14 +98,29 @@ export async function charmGet(path, query = {}, retry = true) {
   return body;
 }
 
+export const validEmail = (e) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(String(e || '').trim());
+
+// CharmHealth's list and detail endpoints put the email in different places
+// (e.g. email, email_id, contact.email, or nested contact arrays). Search the
+// record for any field whose name contains "email" and holds a valid address.
+function findEmail(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 5) return '';
+  const entries = Array.isArray(obj) ? obj.map((v) => [null, v]) : Object.entries(obj);
+  for (const [k, v] of entries) {
+    if (k && /e[-_]?mail/i.test(k) && typeof v === 'string' && validEmail(v)) return v.trim();
+  }
+  for (const [, v] of entries) {
+    const found = findEmail(v, depth + 1);
+    if (found) return found;
+  }
+  return '';
+}
+
 export function normPatient(p = {}) {
   const id = String(p.patient_id ?? p.id ?? '');
   const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || p.name || 'Unknown';
-  const email = p.email || p.email_id || p.contact?.email || '';
-  return { id, name, email, dob: p.dob || '' };
+  return { id, name, email: findEmail(p), dob: p.dob || '' };
 }
-
-export const validEmail = (e) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(e || '');
 
 // If search returns nothing on your account, the filter names differ — change them here.
 export const SEARCH_FILTERS = ['first_name_startswith', 'last_name_startswith'];
@@ -120,9 +135,26 @@ export async function searchPatients(term) {
   return [...found.values()];
 }
 
-export async function getPatient(id) {
-  const body = await charmGet('patients/' + encodeURIComponent(id));
-  return normPatient(body.patient ?? body.data?.patient ?? body.data ?? body);
+// Looks a patient up by ID. If the detail record has no email, falls back to
+// the patient search (which is where the panel showed the email) and matches by ID.
+export async function getPatient(id, nameHint = '') {
+  let p = { id: String(id), name: nameHint || 'Unknown', email: '', dob: '' };
+  try {
+    const body = await charmGet('patients/' + encodeURIComponent(id));
+    const rec = body.patient ?? body.data?.patient ?? body.data ?? body;
+    p = { ...normPatient(rec), id: String(id) };
+    if (!p.email) console.log(JSON.stringify({ event: 'detail_without_email', fieldNames: Object.keys(rec || {}) })); // names only
+  } catch (e) {
+    console.log(JSON.stringify({ event: 'detail_lookup_failed', error: e.message }));
+  }
+  if (!p.email) {
+    const [first, ...rest] = (nameHint || p.name || '').split(' ');
+    for (const term of [first, rest.join(' ')].filter((t) => t && t.length >= 2)) {
+      const match = (await searchPatients(term)).find((x) => x.id === String(id));
+      if (match?.email) { p = { ...p, name: match.name || p.name, email: match.email }; break; }
+    }
+  }
+  return p;
 }
 
 /* ------------------------------------------------------------------ */

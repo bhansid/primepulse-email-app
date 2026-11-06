@@ -35,7 +35,7 @@ export default async (req) => {
 
   try {
     // Recipient is always looked up server-side from CharmHealth.
-    const p = await getPatient(patientId);
+    const p = await getPatient(patientId, String(b.patientName || '').slice(0, 120));
     if (!validEmail(p.email)) return json({ error: `${p.name} has no valid email on file.` }, 400);
 
     const first = p.name.split(' ')[0] || 'there';
